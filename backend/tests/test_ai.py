@@ -87,8 +87,8 @@ def test_make_questions_tops_up_model_questions():
     card = TaskCard(context=DEMO_DRAFT)
     model_questions = stub.make_questions(card)[:1]
     questions = stub.make_questions(card, preferred=model_questions)
-    assert len(questions) == 3
-    assert questions[0].field == model_questions[0].field
+    assert len(questions) == 5
+    assert questions[0].field == model_questions[0].field and questions[-1].field == "contact"
 
 
 def test_long_title_is_cut_by_word():
@@ -261,3 +261,17 @@ def test_guard_capitalizes_text_but_not_contact():
         "contact": FieldOut(value="anna@example.com", evidence="anna@example.com"),
     }, source)
     assert values == {"data": "Выгрузка чеков за год", "contact": "anna@example.com"}
+
+
+def test_complete_card_still_gets_three_questions_marked_optional():
+    analysis = stub.analyze_draft(
+        "Мы сеть из 25 аптек в Астане. Провизоры тратят до часа в день на однотипные вопросы о наличии лекарств. "
+        "Нужно, чтобы покупатели могли сами узнать наличие и цену в ближайшей аптеке. Есть выгрузка остатков из 1С "
+        "каждые 15 минут через API и справочник товаров в XLSX. Ждём Telegram-бота, который по названию лекарства "
+        "показывает наличие, цену и адреса трёх ближайших аптек. Успехом будет, если бот закрывает 80% вопросов о "
+        "наличии без провизора. Срок 6 недель, стек Python, доступ к тестовому API после NDA. Пользоваться будут "
+        "покупатели аптек и провизоры. Контакт: pharma.lead@example.com, созвон раз в неделю по вторникам.",
+        "Ритейл",
+    )
+    assert len(analysis.questions) == 3
+    assert all(q.points == 0 and q.why == stub.OPTIONAL_WHY for q in analysis.questions)
