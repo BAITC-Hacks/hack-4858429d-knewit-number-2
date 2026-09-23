@@ -1,11 +1,17 @@
 """Рекомендации задач команде (AGENTS.md §9). Только подсказка: каталог не фильтруется и ничего не назначается."""
 import re
 
-from app.schemas import CatalogItem, Recommendation, Task, Team
+from app.schemas import CardField, CatalogItem, Rating, Recommendation, Task, Team
 
 MIN_RATING = 40
 TOP = 3
 MIN_STEM = 4
+# Как пробелы карточки звучат для студента: это то, что придётся спросить у заказчика.
+GAP_LABELS: dict[CardField, str] = {
+    "context": "контекст", "need": "потребность", "data": "данные", "expected_result": "ожидаемый результат",
+    "success_criteria": "критерии успеха", "constraints": "сроки и ограничения", "users": "пользователи",
+    "contact": "контакт", "interaction_format": "формат связи",
+}
 
 
 def _words(text: str) -> list[str]:
@@ -36,6 +42,14 @@ def matched_tokens(tokens: list[str], text: str) -> list[str]:
     return [token for token in tokens if any(word.startswith(_stem(token)) for word in words)]
 
 
+def clarity_reason(rating: Rating) -> str:
+    """Можно ли браться без вопросов к заказчику — по непройденным проверкам рейтинга."""
+    gaps = list(dict.fromkeys(GAP_LABELS[item.field] for item in rating.missing if item.field in GAP_LABELS))
+    if not gaps:
+        return "всё ясно без вопросов к заказчику"
+    return f"придётся уточнить у заказчика: {', '.join(gaps)}"
+
+
 def _catalog_positions(tasks: list[Task]) -> dict[int, int]:
     # Запасной расчёт места по правилу §6, если задачи пришли без position.
     published = sorted(
@@ -58,7 +72,8 @@ def _catalog_item(task: Task, position: int) -> CatalogItem:
 def recommend(team: Team, tasks: list[Task]) -> list[Recommendation]:
     """До 3 опубликованных задач с рейтингом ≥ 40, где совпадает хотя бы одно слово команды.
 
-    Сортировка: число совпавших слов, потом рейтинг. reasons — готовая строка «совпадает: python, аналитика».
+    Сортировка: число совпавших слов, потом рейтинг. reasons — готовые строки для студента:
+    «совпадает: python, аналитика» и «всё ясно без вопросов к заказчику» / «придётся уточнить у заказчика: …».
     """
     tokens = team_tokens(team)
     positions = _catalog_positions(tasks)
@@ -73,7 +88,7 @@ def recommend(team: Team, tasks: list[Task]) -> list[Recommendation]:
     return [
         Recommendation(
             task=_catalog_item(task, task.position or positions[task.id]),
-            reasons=[f"совпадает: {', '.join(matched)}"],
+            reasons=[f"совпадает: {', '.join(matched)}", clarity_reason(task.rating)],
         )
         for _, _, task, matched in scored[:TOP]
     ]

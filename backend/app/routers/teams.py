@@ -3,7 +3,9 @@ from sqlmodel import Session, select
 
 from app import schemas
 from app.db import get_session
-from app.models import Team
+from app.models import Task, Team
+from app.recommend import recommend
+from app.routers.tasks import task_responses
 
 router = APIRouter()
 
@@ -15,7 +17,9 @@ def list_teams(session: Session = Depends(get_session)):
 
 @router.get("/teams/{id}/recommendations", response_model=list[schemas.Recommendation])
 def list_recommendations(id: int, session: Session = Depends(get_session)):
-    if session.get(Team, id) is None:
+    team = session.get(Team, id)
+    if team is None:
         raise HTTPException(404, "Команда не найдена")
-    # ponytail: temporary empty result; replace with recommend() when the engine is ready.
-    return []
+    # Только подсказка: каталог не фильтруется, место берётся из полного каталога.
+    tasks = task_responses(session, session.exec(select(Task).where(Task.status == "published")).all())
+    return recommend(schemas.Team.model_validate(team), tasks)

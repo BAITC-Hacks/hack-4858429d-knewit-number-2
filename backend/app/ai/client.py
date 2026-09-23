@@ -58,6 +58,16 @@ def providers() -> list[Provider]:
 
 
 def _chat(provider: Provider, messages: list[dict]) -> str:
+    # Nemotron Nano v2 defaults to reasoning; request the final JSON directly.
+    # Copy messages so this model-specific setting does not affect other providers.
+    if provider.name == "nvidia" and provider.model.casefold() == "nvidia/nvidia-nemotron-nano-9b-v2":
+        messages = [dict(message) for message in messages]
+        for message in messages:
+            if message.get("role") == "system":
+                message["content"] = "/no_think\n" + message["content"]
+                break
+        else:
+            messages.insert(0, {"role": "system", "content": "/no_think"})
     client = OpenAI(api_key=provider.api_key, base_url=provider.base_url, timeout=TIMEOUT, max_retries=1)
     extra = {"response_format": {"type": "json_object"}} if provider.json_mode else {}
     response = client.chat.completions.create(
