@@ -16,6 +16,15 @@ def analyze_draft(draft_text: str, industry: str) -> DraftAnalysis:
         return stub.analyze_draft(draft_text, industry)
     out, ai_mode = result
     values, evidence, removed = guard.apply_guard(out.fields, draft_text)
+    # Иногда модель пропускает явные «Нужно…», «Ждём…», «Успехом будет…»
+    # и формат созвона. Берём только уже распознаваемые заглушкой фрагменты
+    # исходного текста; принятые значения модели остаются приоритетными.
+    draft_values, draft_evidence = stub.extract(draft_text)
+    for field in ("need", "expected_result", "success_criteria", "interaction_format"):
+        if field not in values and is_filled(draft_values.get(field, "")):
+            values[field] = draft_values[field]
+            evidence[field] = draft_evidence[field]
+    removed = [item for item in removed if item.field not in values]
     card = TaskCard(**values)
     return DraftAnalysis(
         card=card, evidence=evidence, removed=removed,
@@ -47,6 +56,13 @@ def build_card(
     if leftovers:
         rest = stub.build_card(draft_text, industry, questions, leftovers, card)
         card, evidence = rest.card, {**rest.evidence, **evidence}
+    # Модель может принять контакт целиком, но пропустить явно указанный созвон.
+    # Восстанавливаем только пустой формат из ответа, не заменяя принятые поля.
+    if not is_filled(card.interaction_format):
+        recovered = stub.build_card(draft_text, industry, questions, answers, card)
+        if is_filled(recovered.card.interaction_format):
+            card = card.model_copy(update={"interaction_format": recovered.card.interaction_format})
+            evidence["interaction_format"] = recovered.evidence["interaction_format"]
     if not is_filled(card.title):
         card = card.model_copy(update={"title": stub.make_title(draft_text)})
     removed = [item for item in removed if not is_filled(getattr(card, item.field))]

@@ -80,7 +80,7 @@ def check_card(label: str, card, evidence: dict, source: str, problems: list[str
         if not value or field == "title":
             continue
         quote = evidence.get(field)
-        if quote is not None and not guard.is_supported(quote, source):
+        if not guard.is_supported(quote, source):
             problems.append(f"{label}.{field}: цитата не из текста — «{quote}»")
         if not guard.numbers_supported(value, source):
             problems.append(f"{label}.{field}: цифры не из текста — «{value}»")
@@ -112,8 +112,9 @@ def run(draft: dict) -> dict:
 
     replies = ANSWERS.get(draft["id"], {})
     answers = [Answer(question_id=q.id, answer=replies.get(q.field, "")) for q in questions]
-    if not any(answer.answer for answer in answers):
-        answers[0] = Answer(question_id=questions[0].id, answer=next(iter(replies.values()), "Уточним на встрече"))
+    # В полном черновике может не быть вопросов к заготовленным ответам.
+    # Не переносим ответ про пользователей, например, в поле данных ради непустоты.
+    # Это проверка функций AI-слоя; HTTP-валидация ответов проверяется отдельно.
     started = time.perf_counter()
     result = build_card(text, industry, questions, answers, analysis.card)
     build_sec = time.perf_counter() - started

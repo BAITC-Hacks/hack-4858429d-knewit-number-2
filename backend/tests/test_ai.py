@@ -263,6 +263,77 @@ def test_guard_capitalizes_text_but_not_contact():
     assert values == {"data": "Выгрузка чеков за год", "contact": "anna@example.com"}
 
 
+@pytest.mark.parametrize("format_value", ["", "Созвон раз в неделю"])
+def test_build_recovers_contact_format_without_overwriting_model(monkeypatch, providers_env, format_value):
+    analysis = stub.analyze_draft(DEMO_DRAFT, "HoReCa")
+    answers = answer_all(analysis, {"contact": "anna@example.com, созвон раз в неделю"})
+    fields = {"contact": {"value": "anna@example.com, созвон раз в неделю",
+                          "evidence": "anna@example.com, созвон раз в неделю"}}
+    if format_value:
+        fields["interaction_format"] = {"value": format_value, "evidence": "созвон раз в неделю"}
+    fake_chat(monkeypatch, {"openai": [json.dumps({"fields": fields}, ensure_ascii=False)]})
+    result = ai.build_card(DEMO_DRAFT, "HoReCa", analysis.questions, answers, analysis.card)
+    assert result.ai_mode == "openai"
+    assert result.card.interaction_format == (format_value or "Созвон раз в неделю.")
+    assert result.evidence["interaction_format"] == "созвон раз в неделю"
+    assert result.card.contact == fields["contact"]["value"]
+
+
+def test_build_does_not_invent_contact_format(monkeypatch, providers_env):
+    analysis = stub.analyze_draft(DEMO_DRAFT, "HoReCa")
+    answers = answer_all(analysis, {"contact": "anna@example.com"})
+    fake_chat(monkeypatch, {"openai": [json.dumps({"fields": {
+        "contact": {"value": "anna@example.com", "evidence": "anna@example.com"},
+    }})]})
+    result = ai.build_card(DEMO_DRAFT, "HoReCa", analysis.questions, answers, analysis.card)
+    assert not result.card.interaction_format
+    assert "interaction_format" not in result.evidence
+
+
+def test_quality_check_detects_missing_evidence():
+    from scripts.ai_check import check_card
+
+    for evidence in ({}, {"data": None}, {"data": ""}):
+        problems, notes = [], []
+        check_card("build", TaskCard(data="Выгрузка CSV"), evidence, "Выгрузка CSV", problems, notes)
+        assert len(problems) == 1 and "build.data" in problems[0]
+
+
+def test_quality_check_does_not_move_answer_to_another_field(monkeypatch):
+    from scripts import ai_check
+
+    draft = next(item for item in json.loads(ai_check.SEED.read_text(encoding="utf-8")) if item["id"] == 5)
+    analysis = stub.analyze_draft(draft["text"], draft["industry"])
+    assert not {q.field for q in analysis.questions} & ai_check.ANSWERS[5].keys()
+    monkeypatch.setattr(ai_check, "analyze_draft", lambda *args: analysis)
+    report = ai_check.run(draft)
+    assert report["answers"] == {}
+    assert report["build"]["card"]["data"] == analysis.card.data
+
+
+def test_analyze_recovers_explicit_draft_facts_before_questions(monkeypatch, providers_env):
+    draft = (
+        "Мы сеть аптек. Нужно узнавать наличие лекарств. "
+        "Ждём Telegram-бота с поиском лекарств и адресов аптек. "
+        "Успехом будет 80% ответов без провизора. "
+        "Контакт: pharma@example.com, созвон раз в неделю."
+    )
+    reply = json.dumps({"fields": {
+        "context": {"value": "Мы сеть аптек.", "evidence": "Мы сеть аптек."},
+        "need": {"value": "Узнавать наличие лекарств", "evidence": "Нужно узнавать наличие лекарств."},
+    }, "questions": [
+        {"field": "success_criteria", "text": "Как измерить успех?", "why": "Для оценки"},
+    ]}, ensure_ascii=False)
+    fake_chat(monkeypatch, {"openai": [reply]})
+    result = ai.analyze_draft(draft, "Ритейл")
+    assert result.card.need == "Узнавать наличие лекарств"  # принятое значение не заменено
+    assert result.card.expected_result == "Ждём Telegram-бота с поиском лекарств и адресов аптек."
+    assert result.card.success_criteria == "Успехом будет 80% ответов без провизора."
+    assert result.card.interaction_format == "Созвон раз в неделю."
+    assert not any(q.field in {"success_criteria", "interaction_format"} for q in result.questions)
+    assert_quotes_from(result.evidence, draft)
+
+
 def test_complete_card_still_gets_three_questions_marked_optional():
     analysis = stub.analyze_draft(
         "Мы сеть из 25 аптек в Астане. Провизоры тратят до часа в день на однотипные вопросы о наличии лекарств. "

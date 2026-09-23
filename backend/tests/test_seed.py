@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from app.schemas import DraftExample, ProposalCreate, TaskCard
@@ -25,7 +26,7 @@ def test_cards():
         assert item["business_name"] and item["industry"] in INDUSTRIES
         card = TaskCard.model_validate(item["card"])
         assert 3 <= len(card.title) <= 120
-        assert "@example.com" in card.contact or card.contact.startswith("@")
+        assert re.fullmatch(r"[A-Za-z0-9._%+-]+@example\.com", card.contact)
     assert [item["expected_score"] for item in cards] == sorted((item["expected_score"] for item in cards), reverse=True)
 
 

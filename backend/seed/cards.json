@@ -28,7 +28,7 @@
       "constraints": "Первые результаты нужны через 6 недель, данные передадим после NDA.",
       "expected_result": "Прогноз заказа на завтра по каждому магазину",
       "success_criteria": "Списания заметно снижаются, а вечером полки не пустуют.",
-      "contact": "@zk_category",
+      "contact": "category@example.com",
       "interaction_format": ""
     },
     "expected_score": 81
