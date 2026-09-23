@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from app.ai import stub
@@ -114,3 +117,16 @@ def test_demo_scenario_10_65_90():
     })
     rating = compute_rating(card)
     assert rating.total == 90 and rating.level == "priority"
+
+
+SEED_CARDS = json.loads((Path(__file__).resolve().parents[1] / "seed" / "cards.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("seed", SEED_CARDS, ids=[seed["business_name"] for seed in SEED_CARDS])
+def test_seed_card_matches_expected_score(seed):
+    assert compute_rating(TaskCard(**seed["card"])).total == seed["expected_score"]
+
+
+def test_seed_cards_cover_all_levels():
+    levels = {compute_rating(TaskCard(**seed["card"])).level for seed in SEED_CARDS}
+    assert levels == {"draft", "working", "ready", "priority"}

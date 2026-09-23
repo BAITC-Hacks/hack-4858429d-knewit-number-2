@@ -63,9 +63,13 @@ FORMAT_RE = re.compile(
 )
 # Порядок важен: фрагмент уходит в первое подошедшее поле.
 MARKERS: list[tuple[CardField, re.Pattern[str]]] = [
+    # CRM, 1С, API сами по себе — не данные («Мы делаем CRM…»), только рядом с «есть / дадим».
     ("data", re.compile(
-        r"выгруз|таблиц|csv|xlsx|json|датасет|crm|1с|excel|баз[аеуы]? данных|\bapi\b|\bлоги?\b"
+        r"выгруз|таблиц|csv|xlsx|json|датасет|архив|баз[аеуы]? данных|\bлоги?\b"
+        r"|^(?:у нас\s+)?(?:есть|имеется|дадим|передадим|(?:можем|готовы) (?:дать|передать)).*(?:crm|1с|excel|api|данн|отчет)"
     )),
+    ("expected_result", re.compile(r"^(?:ждем|ожидаем|результат|на выходе)")),
+    ("success_criteria", re.compile(r"^(?:успех|критери)|считать успехом")),
     ("constraints", re.compile(r"срок|дедлайн|бюджет|\bnda\b|стек|не позднее")),
     ("interaction_format", FORMAT_RE),
     ("users", re.compile(
@@ -114,6 +118,9 @@ def extract(text: str) -> tuple[dict[CardField, str], Evidence]:
     found: dict[CardField, list[str]] = {}
     for clause in _clauses(text):
         if CONTACT_RE.search(clause):
+            _, formats = _contact_parts(clause)
+            if formats:
+                found.setdefault("interaction_format", []).append(formats)
             continue
         lowered = _lower(clause)
         field = next((field for field, pattern in MARKERS if pattern.search(lowered)), None)

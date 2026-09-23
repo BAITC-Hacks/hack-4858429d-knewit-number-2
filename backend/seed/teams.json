@@ -1,0 +1,32 @@
+[
+  {
+    "name": "DataCats",
+    "interests": ["аналитика", "ритейл", "продажи"],
+    "skills": ["анализ данных", "прогнозирование", "визуализация"],
+    "technologies": ["Python", "pandas", "SQL"]
+  },
+  {
+    "name": "Route42",
+    "interests": ["логистика", "оптимизация"],
+    "skills": ["машинное обучение", "оптимизация маршрутов"],
+    "technologies": ["Python", "scikit-learn", "OR-Tools"]
+  },
+  {
+    "name": "ByteBridge",
+    "interests": ["медицина", "сервисы для клиентов"],
+    "skills": ["веб-разработка", "интеграции", "чат-боты"],
+    "technologies": ["React", "FastAPI", "PostgreSQL"]
+  },
+  {
+    "name": "EduPixel",
+    "interests": ["образование", "продуктовая аналитика"],
+    "skills": ["исследования пользователей", "дизайн интерфейсов", "анализ данных"],
+    "technologies": ["Figma", "Python", "Metabase"]
+  },
+  {
+    "name": "Neuron Lab",
+    "interests": ["производство", "компьютерное зрение"],
+    "skills": ["машинное обучение", "компьютерное зрение"],
+    "technologies": ["Python", "PyTorch", "OpenCV"]
+  }
+]

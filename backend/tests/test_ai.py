@@ -94,3 +94,18 @@ def test_make_questions_tops_up_model_questions():
 def test_long_title_is_cut_by_word():
     title = stub.make_title("Нужно " + "очень " * 30 + "быстро.")
     assert len(title) <= stub.MAX_TITLE and title.endswith("…") and "  " not in title
+
+
+def test_stub_reads_full_draft_without_false_data():
+    draft = (
+        "Мы делаем CRM для салонов красоты. Ждём бота, который отвечает клиентам о записи. "
+        "Успехом будет 80% ответов без оператора. Срок 6 недель, доступ к тестовому API после NDA. "
+        "Контакт: team@example.com, созвон раз в неделю."
+    )
+    card = stub.analyze_draft(draft, "IT").card
+    assert not card.data
+    assert card.expected_result == "Ждём бота, который отвечает клиентам о записи."
+    assert card.success_criteria == "Успехом будет 80% ответов без оператора."
+    assert card.constraints == "Срок 6 недель, доступ к тестовому API после NDA."
+    assert card.contact == "team@example.com"
+    assert card.interaction_format == "Созвон раз в неделю."
