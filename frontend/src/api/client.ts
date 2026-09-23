@@ -12,6 +12,16 @@ import type {
   Team,
 } from './types'
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 function errorDetail(body: unknown, fallback: string): string {
   if (body && typeof body === 'object' && 'detail' in body) {
     const detail = body.detail
@@ -38,7 +48,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       },
     })
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'Не удалось связаться с сервером'
+    const detail = 'Не удалось связаться с сервером. Проверьте, что backend запущен.'
     notifyError(detail)
     throw error
   }
@@ -47,7 +57,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const detail = errorDetail(body, `Ошибка запроса (${response.status})`)
     notifyError(detail)
-    throw new Error(detail)
+    throw new ApiError(detail, response.status)
   }
   return body as T
 }

@@ -375,6 +375,97 @@
   padding: 24px 0;
 }
 
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.section-heading h2.ant-typography,
+.section-heading h3.ant-typography {
+  margin: 0;
+}
+
+.task-heading {
+  margin-top: 24px;
+}
+
+.task-heading h2.ant-typography {
+  margin-bottom: 12px;
+}
+
+.task-heading > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-actions {
+  margin-bottom: 24px;
+}
+
+.task-fields {
+  margin: 0;
+}
+
+.task-fields > div + div {
+  margin-top: 24px;
+}
+
+.task-fields dt {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.task-fields dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-fields .evidence-note {
+  margin-top: 10px;
+}
+
+.compact-fields {
+  margin-bottom: 20px;
+}
+
+.compact-fields > div + div {
+  margin-top: 16px;
+}
+
+.proposals-section,
+.recommendations {
+  margin-top: 32px;
+}
+
+.proposal-list {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.proposal-form {
+  max-width: 760px;
+}
+
+.recommendation-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.recommendation-list .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.team-points {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rank-change {
     animation: none;

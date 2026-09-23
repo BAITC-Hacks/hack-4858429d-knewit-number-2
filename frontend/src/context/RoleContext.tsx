@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { getTeams } from '../api/client'
 import type { Team } from '../api/types'
@@ -10,6 +10,8 @@ interface RoleContextValue {
   setRole: (role: Role) => void
   teams: Team[]
   teamsLoading: boolean
+  teamsFailed: boolean
+  refreshTeams: () => void
   selectedTeamId: number | null
   setSelectedTeamId: (id: number | null) => void
 }
@@ -20,13 +22,15 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role>('business')
   const [teams, setTeams] = useState<Team[]>([])
   const [teamsLoading, setTeamsLoading] = useState(false)
+  const [teamsFailed, setTeamsFailed] = useState(false)
+  const [revision, setRevision] = useState(0)
+  const refreshTeams = useCallback(() => setRevision((value) => value + 1), [])
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
 
   useEffect(() => {
-    if (role !== 'team') return
-
     let active = true
     setTeamsLoading(true)
+    setTeamsFailed(false)
     getTeams()
       .then((items) => {
         if (!active) return
@@ -37,16 +41,16 @@ export function RoleProvider({ children }: { children: ReactNode }) {
             : (items[0]?.id ?? null),
         )
       })
-      .catch(() => {}) // Сообщение об ошибке уже показывает API-клиент.
+      .catch(() => { if (active) setTeamsFailed(true) })
       .finally(() => {
         if (active) setTeamsLoading(false)
       })
 
     return () => { active = false }
-  }, [role])
+  }, [role, revision])
 
   return (
-    <RoleContext.Provider value={{ role, setRole, teams, teamsLoading, selectedTeamId, setSelectedTeamId }}>
+    <RoleContext.Provider value={{ role, setRole, teams, teamsLoading, teamsFailed, refreshTeams, selectedTeamId, setSelectedTeamId }}>
       {children}
     </RoleContext.Provider>
   )

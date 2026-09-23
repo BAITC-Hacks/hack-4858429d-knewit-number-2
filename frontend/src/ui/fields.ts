@@ -12,3 +12,5 @@ export const FIELD_LABELS = {
   contact: 'Контакт',
   interaction_format: 'Формат взаимодействия',
 } satisfies Record<CardField, string>
+
+export const CARD_FIELDS = Object.keys(FIELD_LABELS) as CardField[]

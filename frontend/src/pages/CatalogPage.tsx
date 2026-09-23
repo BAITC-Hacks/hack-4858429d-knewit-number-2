@@ -7,6 +7,7 @@ import { getCatalog, getIndustries } from '../api/client'
 import type { CatalogItem, Level } from '../api/types'
 import { useRole } from '../context/RoleContext'
 import { LEVELS, LevelTag, RankBadge, ScoreRing } from '../ui'
+import { Recommendations } from '../components/Recommendations'
 
 const levelOptions = (Object.keys(LEVELS) as Level[]).map((level) => ({
   value: level,
@@ -15,7 +16,7 @@ const levelOptions = (Object.keys(LEVELS) as Level[]).map((level) => ({
 
 export function CatalogPage() {
   const { token } = theme.useToken()
-  const { role } = useRole()
+  const { role, selectedTeamId } = useRole()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const industry = searchParams.get('industry') || undefined
@@ -93,6 +94,8 @@ export function CatalogPage() {
           <Button type="primary" onClick={() => navigate('/tasks/new')}>Создать задачу</Button>
         )}
       </div>
+
+      {role === 'team' && selectedTeamId != null && <Recommendations key={selectedTeamId} teamId={selectedTeamId} />}
 
       <div className="catalog-filters">
         <div className="catalog-filter">

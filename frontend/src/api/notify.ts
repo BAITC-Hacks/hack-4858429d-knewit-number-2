@@ -7,5 +7,5 @@ export function setMessageApi(instance: MessageInstance | null) {
 }
 
 export function notifyError(detail: string) {
-  if (messageApi) void messageApi.error(detail)
+  if (messageApi) void messageApi.error({ key: `api-error:${detail}`, content: detail })
 }

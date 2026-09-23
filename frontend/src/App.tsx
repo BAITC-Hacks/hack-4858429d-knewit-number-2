@@ -1,9 +1,12 @@
-import { Layout, Menu, Segmented, Select, theme, Typography } from 'antd'
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Button, Layout, Menu, Result, Segmented, Select, theme, Typography } from 'antd'
+import { Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useRole } from './context/RoleContext'
 import type { Role } from './context/RoleContext'
 import { NewTaskPage } from './pages/NewTaskPage'
 import { CatalogPage } from './pages/CatalogPage'
+import { TaskPage } from './pages/TaskPage'
+import { MyTasks } from './pages/MyTasks'
 
 const navigation = [
   { key: '/', label: 'Каталог' },
@@ -11,15 +14,13 @@ const navigation = [
   { key: '/my', label: 'Мои задачи' },
 ]
 
-function Page({ title }: { title: string }) {
-  return <Typography.Title level={2}>{title}</Typography.Title>
-}
-
 export default function App() {
   const { token } = theme.useToken()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { role, setRole, teams, teamsLoading, selectedTeamId, setSelectedTeamId } = useRole()
+  useEffect(() => { window.scrollTo({ top: 0 }) }, [pathname])
+  const { role, setRole, teams, teamsLoading, teamsFailed, refreshTeams, selectedTeamId, setSelectedTeamId } = useRole()
+  const selectedTeam = teams.find((team) => team.id === selectedTeamId)
   const selectedKey = pathname.startsWith('/tasks/') && pathname !== '/tasks/new'
     ? ''
     : pathname
@@ -50,6 +51,7 @@ export default function App() {
             onChange={setRole}
           />
           {role === 'team' && (
+            <>
             <Select
               aria-label="Выбор команды"
               className="team-select"
@@ -58,7 +60,11 @@ export default function App() {
               value={selectedTeamId}
               options={teams.map(({ id, name }) => ({ value: id, label: name }))}
               onChange={setSelectedTeamId}
+              notFoundContent={teamsLoading ? 'Загружаем команды…' : 'Команды не найдены'}
             />
+            {teamsFailed ? <Button onClick={refreshTeams}>Обновить команды</Button>
+              : selectedTeam && <Typography.Text className="team-points">{selectedTeam.points} баллов</Typography.Text>}
+            </>
           )}
         </div>
       </Layout.Header>
@@ -66,9 +72,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<CatalogPage />} />
           <Route path="/tasks/new" element={<NewTaskPage />} />
-          <Route path="/tasks/:id" element={<Page title="Задача" />} />
-          <Route path="/my" element={<Page title="Мои задачи" />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/tasks/:id" element={<TaskPage />} />
+          <Route path="/my" element={<MyTasks />} />
+          <Route path="*" element={<Result status="404" title="Страница не найдена" extra={<Link to="/">Вернуться в каталог</Link>} />} />
         </Routes>
       </Layout.Content>
     </Layout>
