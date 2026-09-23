@@ -6,7 +6,7 @@
 import re
 
 from app.ai.schemas import CardBuild, DraftAnalysis
-from app.rating import compute_rating
+from app.rating import compute_rating, is_filled
 from app.schemas import Answer, CardField, Evidence, Question, TaskCard
 
 MAX_FIELD = 2000
@@ -55,12 +55,6 @@ PRIORITY: list[CardField] = [
     "data", "expected_result", "success_criteria", "users", "constraints",
     "need", "context", "contact", "interaction_format",
 ]
-# Максимум баллов поля по §7 — запасной вариант, пока rating.py отдаёт пустую разбивку.
-FIELD_WEIGHTS: dict[CardField, int] = {
-    "context": 10, "need": 10, "data": 20, "expected_result": 15, "success_criteria": 15,
-    "constraints": 10, "users": 10, "contact": 5, "interaction_format": 5,
-}
-STOP_LIST = {"нет", "-", "не знаю", "n/a", "tbd", "?"}
 
 NEED_START = r"(?:мы\s+|нам\s+|мне\s+)?(?:хоти|хотел|нужн|надо|необходим|требуется|планиру|задача|цель)"
 CONTACT_RE = re.compile(r"\S+@\S+\.\w+|\+?\d[\d\s\-()]{8,}\d|@\w{3,}")
@@ -79,11 +73,6 @@ MARKERS: list[tuple[CardField, re.Pattern[str]]] = [
     )),
     ("need", re.compile("^" + NEED_START)),
 ]
-
-
-def is_filled(text: str) -> bool:
-    text = text.strip()
-    return len(text) >= 3 and text.lower() not in STOP_LIST
 
 
 def _lower(text: str) -> str:
@@ -141,12 +130,9 @@ def extract(text: str) -> tuple[dict[CardField, str], Evidence]:
 
 def question_points(card: TaskCard) -> dict[CardField, int]:
     """Сколько баллов рейтинга принесёт каждое поле — сумма непройденных проверок."""
-    rating = compute_rating(card)
     points: dict[CardField, int] = {}
-    for item in rating.missing:
+    for item in compute_rating(card).missing:
         points[item.field] = points.get(item.field, 0) + item.points
-    if not rating.categories:
-        points = {field: weight for field, weight in FIELD_WEIGHTS.items() if not is_filled(getattr(card, field))}
     return points
 
 
