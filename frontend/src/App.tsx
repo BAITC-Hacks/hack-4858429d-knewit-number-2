@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { useRole } from './context/RoleContext'
 import type { Role } from './context/RoleContext'
 import { NewTaskPage } from './pages/NewTaskPage'
+import { CatalogPage } from './pages/CatalogPage'
 
 const navigation = [
   { key: '/', label: 'Каталог' },
@@ -63,7 +64,7 @@ export default function App() {
       </Layout.Header>
       <Layout.Content className="app-content">
         <Routes>
-          <Route path="/" element={<Page title="Каталог" />} />
+          <Route path="/" element={<CatalogPage />} />
           <Route path="/tasks/new" element={<NewTaskPage />} />
           <Route path="/tasks/:id" element={<Page title="Задача" />} />
           <Route path="/my" element={<Page title="Мои задачи" />} />

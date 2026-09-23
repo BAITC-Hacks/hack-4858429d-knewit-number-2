@@ -6,12 +6,14 @@ interface ScoreRingProps {
   score: number
   level: Level
   size?: number
+  type?: 'circle' | 'dashboard'
 }
 
-export function ScoreRing({ score, level, size = 120 }: ScoreRingProps) {
+export function ScoreRing({ score, level, size = 120, type = 'dashboard' }: ScoreRingProps) {
   return (
     <Progress
-      type="dashboard"
+      type={type}
+      aria-label={`Рейтинг: ${score} из 100`}
       percent={score}
       size={size}
       strokeColor={LEVELS[level].color}

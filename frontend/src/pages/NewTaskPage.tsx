@@ -28,7 +28,8 @@ import {
 } from '../api/client'
 import type { CardField, DraftExample, Rating, Task, TaskCard } from '../api/types'
 import { useRole } from '../context/RoleContext'
-import { AiModeTag, EvidenceNote, FIELD_LABELS, LevelTag, ScoreRing } from '../ui'
+import { AiModeTag, EvidenceNote, FIELD_LABELS, LevelTag } from '../ui'
+import { RatingPanel } from '../components/RatingPanel'
 
 interface DraftValues {
   draft_text: string
@@ -80,12 +81,11 @@ export function NewTaskPage() {
   useEffect(() => {
     if (step !== 2 || !cardDraft) return
     let active = true
-    setPreview(null)
     setPreviewLoading(true)
     const timer = window.setTimeout(() => {
       previewRating(cardDraft)
         .then((rating) => { if (active) setPreview(rating) })
-        .catch(() => {}) // Ошибку показывает API-клиент.
+        .catch(() => { if (active) setPreview(null) }) // Ошибку показывает API-клиент.
         .finally(() => { if (active) setPreviewLoading(false) })
     }, 400)
     return () => {
@@ -344,51 +344,41 @@ export function NewTaskPage() {
             </Form>
           </Card>
           <aside className="builder-aside">
-            <Card>
-              <Typography.Title level={5}>Прогноз рейтинга</Typography.Title>
-              <Spin spinning={previewLoading}>
-                <div className="builder-score">
-                  {preview ? (
-                    <>
-                      <ScoreRing score={preview.total} level={preview.level} size={136} />
-                      <LevelTag level={preview.level} />
-                    </>
-                  ) : (
-                    <Typography.Text type="secondary">Расчёт рейтинга…</Typography.Text>
+            <Spin spinning={previewLoading}>
+              {preview ? <RatingPanel rating={preview} preview /> : (
+                <Card title="Прогноз рейтинга">
+                  {previewLoading ? <Typography.Text type="secondary">Расчёт рейтинга…</Typography.Text> : (
+                    <Space direction="vertical">
+                      <Typography.Text type="secondary">Не удалось получить прогноз</Typography.Text>
+                      <Button onClick={() => setCardDraft({ ...cardForm.getFieldsValue() })}>Повторить</Button>
+                    </Space>
                   )}
-                </div>
-              </Spin>
-              <Typography.Paragraph className="builder-caption" type="secondary">
-                прогноз, засчитывается после подтверждения
-              </Typography.Paragraph>
-            </Card>
+                </Card>
+              )}
+            </Spin>
           </aside>
         </div>
       )}
 
       {step === 3 && task && (
-        <Card className="builder-main-card">
-          <Typography.Title level={4}>Карточка подтверждена</Typography.Title>
-          {task.rating && (
-            <div className="builder-score builder-final-score">
-              <ScoreRing score={task.rating.total} level={task.rating.level} size={144} />
-              <LevelTag level={task.rating.level} />
-              <Typography.Text type="secondary">Подтверждённый рейтинг</Typography.Text>
-            </div>
-          )}
-          {task.status === 'published' ? (
-            <Alert
-              type="success"
-              showIcon
-              message={task.position != null
-                ? `Задача в каталоге на месте #${task.position}`
-                : 'Задача опубликована в каталоге'}
-              description={<Link to={`/tasks/${task.id}`}>Открыть страницу задачи</Link>}
-            />
-          ) : (
-            <Button type="primary" onClick={publish} loading={submitting}>Опубликовать</Button>
-          )}
-        </Card>
+        <div className="builder-grid">
+          <Card className="builder-main-card">
+            <Typography.Title level={4}>Карточка подтверждена</Typography.Title>
+            {task.status === 'published' ? (
+              <Alert
+                type="success"
+                showIcon
+                message={task.position != null
+                  ? `Задача в каталоге на месте #${task.position}`
+                  : 'Задача опубликована в каталоге'}
+                description={<Link to={`/tasks/${task.id}`}>Открыть страницу задачи</Link>}
+              />
+            ) : (
+              <Button type="primary" onClick={publish} loading={submitting}>Опубликовать</Button>
+            )}
+          </Card>
+          {task.rating && <aside className="builder-aside"><RatingPanel rating={task.rating} /></aside>}
+        </div>
       )}
 
       <Modal
