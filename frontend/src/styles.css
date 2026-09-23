@@ -2,6 +2,11 @@
   min-height: 100vh;
 }
 
+.ant-app {
+  min-height: 100vh;
+  font-variant-numeric: tabular-nums;
+}
+
 .app-layout {
   min-height: 100vh;
 }
@@ -14,13 +19,8 @@
 
 .app-logo {
   flex: none;
-  color: #fff;
   font-size: 20px;
   font-weight: 700;
-}
-
-.app-logo:hover {
-  color: #fff;
 }
 
 .app-nav {
@@ -43,4 +43,32 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 32px 24px;
+}
+
+.level-tag {
+  margin-inline-end: 0;
+  font-weight: 600;
+}
+
+.score-ring-value,
+.rank-badge {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.score-ring-value {
+  font-size: 1.5rem;
+}
+
+.rank-badge {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.evidence-note {
+  padding-left: 10px;
+  border-left: 2px solid #D7DDE8;
+  color: #6B758B;
+  font-size: 12px;
+  line-height: 1.5;
 }

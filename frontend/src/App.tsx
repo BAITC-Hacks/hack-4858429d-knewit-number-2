@@ -1,4 +1,4 @@
-import { Layout, Menu, Segmented, Select, Typography } from 'antd'
+import { Layout, Menu, Segmented, Select, theme, Typography } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useRole } from './context/RoleContext'
 import type { Role } from './context/RoleContext'
@@ -14,6 +14,7 @@ function Page({ title }: { title: string }) {
 }
 
 export default function App() {
+  const { token } = theme.useToken()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { role, setRole, teams, teamsLoading, selectedTeamId, setSelectedTeamId } = useRole()
@@ -23,10 +24,13 @@ export default function App() {
 
   return (
     <Layout className="app-layout">
-      <Layout.Header className="app-header">
-        <Link className="app-logo" to="/">TaskReady</Link>
+      <Layout.Header
+        className="app-header"
+        style={{ borderBottom: `1px solid ${token.colorBorderSecondary}` }}
+      >
+        <Link className="app-logo" style={{ color: token.colorPrimary }} to="/">TaskReady</Link>
         <Menu
-          theme="dark"
+          theme="light"
           mode="horizontal"
           selectedKeys={[selectedKey]}
           items={navigation}

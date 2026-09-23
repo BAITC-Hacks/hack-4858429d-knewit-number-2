@@ -1,4 +1,4 @@
-import { message } from 'antd'
+import { notifyError } from './notify'
 import type {
   Answer,
   CatalogItem,
@@ -39,14 +39,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Не удалось связаться с сервером'
-    message.error(detail)
+    notifyError(detail)
     throw error
   }
 
   const body: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const detail = errorDetail(body, `Ошибка запроса (${response.status})`)
-    message.error(detail)
+    notifyError(detail)
     throw new Error(detail)
   }
   return body as T
