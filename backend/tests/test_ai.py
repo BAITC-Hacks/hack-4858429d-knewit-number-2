@@ -109,3 +109,155 @@ def test_stub_reads_full_draft_without_false_data():
     assert card.constraints == "Срок 6 недель, доступ к тестовому API после NDA."
     assert card.contact == "team@example.com"
     assert card.interaction_format == "Созвон раз в неделю."
+
+
+# --- guard, client и цепочка провайдеров (реальных запросов нет: _chat замокан) ---
+
+import json
+
+import pytest
+
+from app import ai
+from app.ai import client, guard
+from app.ai.schemas import FieldOut
+
+
+@pytest.fixture
+def providers_env(monkeypatch):
+    monkeypatch.setenv("AI_MODE", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai")
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-nvidia")
+
+
+def fake_chat(monkeypatch, replies: dict[str, list]):
+    """replies: провайдер → очередь ответов (строка или исключение). Возвращает журнал вызовов."""
+    calls = []
+
+    def chat(provider, messages):
+        calls.append(provider.name)
+        reply = replies[provider.name].pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(client, "_chat", chat)
+    return calls
+
+
+def analyze_json(**fields) -> str:
+    return json.dumps({
+        "fields": {name: {"value": value, "evidence": quote} for name, (value, quote) in fields.items()},
+        "questions": [
+            {"field": "data", "text": "Какие данные о продажах кофеен вы дадите команде?", "why": "Чтобы начать"},
+            {"field": "users", "text": "Кто в сети кофеен будет пользоваться решением?", "why": "Под кого делать"},
+        ],
+    }, ensure_ascii=False)
+
+
+def test_guard_keeps_real_quote_and_drops_invented():
+    fields = {
+        "context": FieldOut(value="Продажи в будни падают", evidence="Продажи в будние дни падают"),
+        "need": FieldOut(value="Понять причины", evidence="хотим понять, почему и что делать!"),
+        "data": FieldOut(value="Выгрузка из 1С за год", evidence="есть выгрузка из 1С за год"),
+        "success_criteria": FieldOut(value="Рост продаж на 15%", evidence="Продажи в будние дни падают"),
+        "users": FieldOut(value="Бариста", evidence=None),
+        "title": FieldOut(value="Падение продаж кофеен в будни", evidence=None),
+    }
+    values, evidence, removed = guard.apply_guard(fields, DEMO_DRAFT)
+    assert values == {
+        "title": "Падение продаж кофеен в будни",
+        "context": "Продажи в будни падают",
+        "need": "Понять причины",
+    }
+    assert evidence == {"context": "Продажи в будние дни падают", "need": "хотим понять, почему и что делать!"}
+    assert {item.field for item in removed} == {"data", "success_criteria", "users"}
+    assert all(item.reason == "нет подтверждения в тексте пользователя" for item in removed)
+
+
+def test_guard_accepts_quote_with_most_words_present():
+    source = "Есть выгрузка чеков из кассы за 12 месяцев в формате CSV"
+    assert guard.is_supported("выгрузка чеков кассы за 12 месяцев CSV формат", source)
+    assert not guard.is_supported("выгрузка заказов из CRM за два года", source)
+    assert not guard.is_supported("   ", source)
+
+
+def test_null_strings_are_empty():
+    assert FieldOut.model_validate({"value": "null", "evidence": " None "}) == FieldOut()
+
+
+def test_providers_chain_from_env(monkeypatch, providers_env):
+    assert [p.name for p in client.providers()] == ["openai", "nvidia"]
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    assert [p.name for p in client.providers()] == ["nvidia"]
+    monkeypatch.setenv("AI_MODE", "stub          # auto | stub")
+    assert client.providers() == []
+
+
+def test_stub_mode_analyze_has_questions(monkeypatch):
+    monkeypatch.setenv("AI_MODE", "stub")
+    analysis = ai.analyze_draft(DEMO_DRAFT, "HoReCa")
+    assert analysis.ai_mode == "stub" and 3 <= len(analysis.questions) <= 5
+
+
+def test_invalid_json_everywhere_falls_back_to_stub(monkeypatch, providers_env):
+    calls = fake_chat(monkeypatch, {"openai": ["не JSON", '{"fields": 1}'], "nvidia": ["```json\n{oops", "[]"]})
+    analysis = ai.analyze_draft(DEMO_DRAFT, "HoReCa")
+    assert calls == ["openai", "openai", "nvidia", "nvidia"]
+    assert analysis.ai_mode == "stub" and 3 <= len(analysis.questions) <= 5
+
+
+def test_api_error_moves_to_next_provider(monkeypatch, providers_env):
+    reply = analyze_json(context=("Продажи в будние дни падают", "Продажи в будние дни падают"))
+    calls = fake_chat(monkeypatch, {"openai": [RuntimeError("403 Forbidden")], "nvidia": [f"```json\n{reply}\n```"]})
+    analysis = ai.analyze_draft(DEMO_DRAFT, "HoReCa")
+    assert calls == ["openai", "nvidia"] and analysis.ai_mode == "nvidia"
+    assert analysis.card.context == "Продажи в будние дни падают"
+
+
+def test_retry_then_guard_and_questions_by_code(monkeypatch, providers_env):
+    reply = analyze_json(
+        context=("Продажи в будние дни падают", "Продажи в будние дни падают"),
+        success_criteria=("Рост выручки на 20%", "хотим вырасти на 20%"),
+    )
+    calls = fake_chat(monkeypatch, {"openai": ["Вот JSON: {", reply]})
+    analysis = ai.analyze_draft(DEMO_DRAFT, "HoReCa")
+    assert calls == ["openai", "openai"] and analysis.ai_mode == "openai"
+    assert not analysis.card.success_criteria
+    assert [item.field for item in analysis.removed] == ["success_criteria"]
+    fields = [q.field for q in analysis.questions]
+    assert fields[:2] == ["data", "users"] and fields[-1] == "contact"
+    assert [q.id for q in analysis.questions] == [f"q{i}" for i in range(1, len(fields) + 1)]
+    assert all(q.points > 0 for q in analysis.questions)
+
+
+def test_build_keeps_answers_model_missed(monkeypatch, providers_env):
+    monkeypatch.setenv("AI_MODE", "stub")
+    analysis = ai.analyze_draft(DEMO_DRAFT, "HoReCa")
+    monkeypatch.setenv("AI_MODE", "auto")
+    answers = answer_all(analysis, {
+        "data": "Выгрузка чеков из POS за 12 месяцев в CSV",
+        "users": "Управляющие кофейнями и маркетолог сети",
+    })
+    reply = json.dumps({"fields": {
+        "title": {"value": "Почему падают продажи кофеен в будни", "evidence": None},
+        "data": {"value": "Чеки из POS за 12 месяцев, CSV", "evidence": "Выгрузка чеков из POS за 12 месяцев в CSV"},
+        "users": {"value": "Все жители Алматы", "evidence": "жители Алматы любят кофе"},
+    }}, ensure_ascii=False)
+    fake_chat(monkeypatch, {"openai": [reply]})
+    result = ai.build_card(DEMO_DRAFT, "HoReCa", analysis.questions, answers, analysis.card)
+    card = result.card
+    assert result.ai_mode == "openai"
+    assert card.title == "Почему падают продажи кофеен в будни"
+    assert card.data == "Чеки из POS за 12 месяцев, CSV"
+    assert card.users == result.evidence["users"] == "Управляющие кофейнями и маркетолог сети"
+    assert card.context == DEMO_DRAFT and card.need == analysis.card.need
+    assert result.removed == []
+
+
+def test_guard_capitalizes_text_but_not_contact():
+    source = "выгрузка чеков за год, пишите anna@example.com"
+    values, _, _ = guard.apply_guard({
+        "data": FieldOut(value="выгрузка чеков за год", evidence="выгрузка чеков за год"),
+        "contact": FieldOut(value="anna@example.com", evidence="anna@example.com"),
+    }, source)
+    assert values == {"data": "Выгрузка чеков за год", "contact": "anna@example.com"}

@@ -143,8 +143,8 @@ def question_points(card: TaskCard) -> dict[CardField, int]:
     return points
 
 
-def make_questions(card: TaskCard, preferred: list[Question] | None = None) -> list[Question]:
-    """3–5 вопросов: сначала вопросы модели, потом добивка шаблонами по самым весомым пробелам.
+def make_questions(card: TaskCard, preferred: list | None = None) -> list[Question]:
+    """3–5 вопросов: сначала вопросы модели (field, text, why), потом добивка шаблонами по самым весомым пробелам.
 
     id и points всегда проставляет код. Контакт спрашиваем обязательно, если его нет:
     без него команда не сможет связаться с бизнесом.
@@ -152,18 +152,22 @@ def make_questions(card: TaskCard, preferred: list[Question] | None = None) -> l
     points = question_points(card)
     chosen: dict[CardField, tuple[str, str]] = {}
     for question in preferred or []:
-        if question.field in TEMPLATES and question.field not in chosen and len(chosen) < 5:
-            chosen[question.field] = (question.text, question.why)
+        # Вопрос по уже закрытому полю рейтингу ничего не даст.
+        if (question.field in TEMPLATES and points.get(question.field, 0) > 0
+                and question.field not in chosen and len(chosen) < 5):
+            chosen[question.field] = (question.text, question.why or TEMPLATES[question.field][1])
     ranked = sorted(TEMPLATES, key=lambda field: (
         -points.get(field, 0), is_filled(getattr(card, field)), PRIORITY.index(field),
     ))
-    gaps = [field for field in ranked if points.get(field, 0) > 0 and field not in chosen]
-    ask_contact = "contact" in gaps and not preferred
-    if ask_contact:
-        gaps.remove("contact")
-    target = 3 if preferred else 5  # вопросы модели только добиваем до минимума
-    for field in gaps[:max(0, target - len(chosen) - ask_contact)]:
-        chosen[field] = TEMPLATES[field]
+    ask_contact = points.get("contact", 0) > 0 and "contact" not in chosen
+    if ask_contact and len(chosen) >= 5:
+        chosen.pop(list(chosen)[-1])
+    target = (3 if chosen else 5) - ask_contact  # вопросы модели только добиваем до минимума
+    for field in ranked:
+        if len(chosen) >= target:
+            break
+        if field != "contact" and points.get(field, 0) > 0:
+            chosen.setdefault(field, TEMPLATES[field])
     if ask_contact:
         chosen["contact"] = TEMPLATES["contact"]
     for field in ranked:
