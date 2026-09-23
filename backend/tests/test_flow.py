@@ -21,6 +21,7 @@ DRAFT = {
 def client(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'flow.db'}", connect_args={"check_same_thread": False})
     monkeypatch.setattr(db, "engine", engine)
+    monkeypatch.setattr(db, "SEED_DIR", tmp_path / "empty-seed")
     monkeypatch.setenv("AI_MODE", "stub")
     try:
         with TestClient(app) as client:
@@ -39,6 +40,11 @@ def test_stub_task_flow(client):
     assert task.draft_rating == rating.compute_rating(task.card)
     assert task.rating is None and task.position is None
     assert task.evidence["context"] == DRAFT["draft_text"]
+    proposal_body = {
+        "team_id": 9999, "idea": "Исследуем продажи кофеен", "plan": "Построим отчёт по дням",
+        "deadline": "6 недель", "prototype_url": "https://example.com/prototype",
+    }
+    assert client.post(f"{url}/proposals", json=proposal_body).status_code == 400
 
     data_question = next(question for question in task.questions if question.field == "data")
     answers = [{"question_id": data_question.id, "answer": "Выгрузка чеков за 12 месяцев в CSV"}]
@@ -84,6 +90,34 @@ def test_stub_task_flow(client):
     assert updated["rating_history"][-1]["total"] == updated["rating"]["total"]
     assert client.get(url).json() == updated
     assert client.get("/api/tasks").json() == [updated]
+
+    with Session(db.engine) as session:
+        teams = [Team(name="DataCats"), Team(name="Аналитики")]
+        session.add_all(teams)
+        session.commit()
+        team_ids = [team.id for team in teams]
+    assert client.post(f"{url}/proposals", json=proposal_body).status_code == 404
+    proposals = []
+    for team_id in team_ids:
+        response = client.post(f"{url}/proposals", json={**proposal_body, "team_id": team_id})
+        assert response.status_code == 200, response.text
+        proposals.append(response.json())
+    assert [proposal["status"] for proposal in proposals] == ["pending", "pending"]
+    assert client.get(f"{url}/proposals").json() == proposals
+    assert client.get(url).json()["proposals_count"] == 2
+    assert client.get("/api/catalog").json()[0]["proposals_count"] == 2
+
+    first, second = [f"/api/proposals/{proposal['id']}/decision" for proposal in proposals]
+    assert client.post(first, json={"decision": "pending"}).status_code == 422
+    assert client.post(first, json={"decision": "selected"}).json()["status"] == "selected"
+    assert client.get(f"{url}/proposals").json()[1]["status"] == "pending"
+    assert client.post(second, json={"decision": "selected"}).json()["status"] == "selected"
+    assert all(proposal["status"] == "selected" for proposal in client.get(f"{url}/proposals").json())
+    assert client.post(second, json={"decision": "rejected"}).json()["status"] == "rejected"
+    assert [proposal["status"] for proposal in client.get(f"{url}/proposals").json()] == ["selected", "rejected"]
+    assert all(team["points"] == 0 for team in client.get("/api/teams").json())
+    assert client.get("/api/tasks/9999/proposals").status_code == 404
+    assert client.post("/api/proposals/9999/decision", json={"decision": "selected"}).status_code == 404
 
 
 def test_task_flow_validation(client):

@@ -10,6 +10,7 @@ from app.schemas import Task, TaskCard
 def test_backend_skeleton(tmp_path, monkeypatch):
     engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
     monkeypatch.setattr(db, "engine", engine)
+    monkeypatch.setattr(db, "SEED_DIR", tmp_path / "empty-seed")
     monkeypatch.setenv("AI_MODE", "stub")
     expected_routes = {
         ("post", "/api/tasks"), ("get", "/api/tasks"), ("get", "/api/tasks/{id}"),
@@ -46,8 +47,8 @@ def test_backend_skeleton(tmp_path, monkeypatch):
             task = Task.model_validate(response.json())
             task_url = f"/api/tasks/{task.id}"
             assert task.status == "clarifying" and task.ai_mode == "stub"
-            assert len(task.questions) == 3
-            assert task.rating is None and task.draft_rating.total == 0
+            assert 3 <= len(task.questions) <= 5
+            assert task.rating is None and task.draft_rating == rating.compute_rating(task.card)
             assert task.evidence["context"] == task.draft_text
             assert client.post(f"{task_url}/publish").status_code == 400
             assert client.post(f"{task_url}/answers", json={"answers": []}).status_code == 422
@@ -56,18 +57,24 @@ def test_backend_skeleton(tmp_path, monkeypatch):
             ]}).status_code == 400
 
             answer = "  Выгрузка чеков из POS за 12 месяцев в CSV  "
-            task = client.post(f"{task_url}/answers", json={"answers": [
-                {"question_id": "q1", "answer": ""}, {"question_id": "q2", "answer": answer},
-            ]}).json()
+            data_question = next(question for question in task.questions if question.field == "data")
+            other_question = next(question for question in task.questions if question.field != "data")
+            answers = [
+                {"question_id": other_question.id, "answer": ""},
+                {"question_id": data_question.id, "answer": answer},
+            ]
+            task = client.post(f"{task_url}/answers", json={"answers": answers}).json()
             assert task["status"] == "card_ready" and task["rating"] is None
-            assert task["card"]["data"] == task["evidence"]["data"] == answer
+            assert task["answers"] == answers
+            assert task["card"]["data"] == task["evidence"]["data"] == answer.strip()
             card = task["card"]
+            expected_rating = rating.compute_rating(TaskCard(**card)).model_dump()
             for invalid in [{**card, "title": "ab"}, {**card, "data": "x" * 2001}]:
                 assert client.put(f"{task_url}/card", json=invalid).status_code == 422
-            assert client.post("/api/rating/preview", json=card).json()["total"] == 0
+            assert client.post("/api/rating/preview", json=card).json() == expected_rating
             assert client.get(task_url).json()["rating"] is None
             task = client.put(f"{task_url}/card", json=card).json()
-            assert task["status"] == "confirmed" and task["rating"]["total"] == 0
+            assert task["status"] == "confirmed" and task["rating"] == expected_rating
             assert len(task["rating_history"]) == 1
             task = client.post(f"{task_url}/publish").json()
             assert task["status"] == "published" and task["position"] == 1
@@ -102,16 +109,19 @@ def test_backend_skeleton(tmp_path, monkeypatch):
             second_url = f"/api/tasks/{second['id']}"
             assert len(second["card"]["context"]) == 2000
             assert client.post(f"{second_url}/proposals", json=proposal_body).status_code == 400
+            data_question = next(question for question in second["questions"] if question["field"] == "data")
             second = client.post(f"{second_url}/answers", json={"answers": [
-                {"question_id": "q1", "answer": "Упростить анализ данных"},
+                {"question_id": data_question["id"], "answer": "Упростить анализ данных"},
             ]}).json()
-            assert client.put(f"{second_url}/card", json=second["card"]).status_code == 200
+            # Equal ratings keep the earlier publication ahead.
+            second_card = {**card, "title": "Анализ данных IT"}
+            assert client.put(f"{second_url}/card", json=second_card).status_code == 200
             assert client.post(f"{second_url}/publish").json()["position"] == 2
             assert client.get("/api/catalog?industry=IT&level=draft").json()[0]["position"] == 2
 
-            improved = rating.compute_rating(TaskCard(**card)).model_copy(update={"total": 70, "level": "ready", "level_label": "Готовая"})
-            monkeypatch.setattr(rating, "compute_rating", lambda card: improved)
-            second = client.put(f"{second_url}/card", json=second["card"]).json()
+            second_card["success_criteria"] = "Рост выручки на 15% за 2 месяца"
+            second = client.put(f"{second_url}/card", json=second_card).json()
+            assert second["rating"]["total"] > expected_rating["total"]
             assert second["status"] == "published" and second["position"] == 1
             assert len(second["rating_history"]) == 2
             assert client.get(task_url).json()["position"] == 2
@@ -119,6 +129,6 @@ def test_backend_skeleton(tmp_path, monkeypatch):
 
         # A new application lifespan uses the same persisted SQLite records.
         with TestClient(app) as client:
-            assert client.get(task_url).json()["card"]["data"] == answer
+            assert client.get(task_url).json()["card"]["data"] == answer.strip()
     finally:
         engine.dispose()

@@ -1,11 +1,9 @@
-import json
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
-from app.db import get_session
+from app.db import get_session, read_seed
 from app.models import Task
 from app.schemas import CatalogItem, DraftExample, Level
 
@@ -65,6 +63,4 @@ def get_industries():
 
 @router.get("/examples/drafts", response_model=list[DraftExample])
 def get_draft_examples():
-    path = Path(__file__).resolve().parents[2] / "seed" / "drafts.json"
-    # Seed data will be supplied by Zarip; an empty catalog is valid during scaffolding.
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    return read_seed("drafts.json")

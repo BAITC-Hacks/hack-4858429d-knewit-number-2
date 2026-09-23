@@ -5,13 +5,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.db import create_db_and_tables
+from app.db import create_db_and_tables, seed_database
 from app.routers import catalog, proposals, tasks, teams
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
+    seed_database()
     yield
 
 
