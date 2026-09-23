@@ -151,8 +151,10 @@ export function CatalogPage() {
                   </div>
                   <div className="catalog-rating">
                     <ScoreRing score={task.rating_total} level={task.level} type="circle" size={84} />
-                    <LevelTag level={task.level} />
-                    {task.level === 'draft' && <Typography.Text type="secondary">требует уточнения</Typography.Text>}
+                    <LevelTag level={task.level} label={task.level_label} />
+                    {task.level === 'draft' && !task.level_label.includes('требует уточнения') && (
+                      <Typography.Text type="secondary">требует уточнения</Typography.Text>
+                    )}
                   </div>
                 </Link>
               </li>

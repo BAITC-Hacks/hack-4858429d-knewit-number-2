@@ -13,12 +13,14 @@ import {
   Space,
   Spin,
   Steps,
+  Tag,
   Typography,
   theme,
 } from 'antd'
 import { Link } from 'react-router-dom'
 import {
   createTask,
+  getCatalog,
   getDraftExamples,
   getIndustries,
   previewRating,
@@ -26,10 +28,11 @@ import {
   submitAnswers,
   updateTaskCard,
 } from '../api/client'
-import type { CardField, DraftExample, Rating, Task, TaskCard } from '../api/types'
+import type { CardField, CatalogItem, DraftExample, Rating, Task, TaskCard } from '../api/types'
 import { useRole } from '../context/RoleContext'
-import { AiModeTag, EvidenceNote, FIELD_LABELS, LevelTag } from '../ui'
+import { AiModeTag, EvidenceNote, FIELD_LABELS, LevelTag, RankChange } from '../ui'
 import { RatingPanel } from '../components/RatingPanel'
+import { predictCatalogPosition } from '../lib/catalogPosition'
 
 interface DraftValues {
   draft_text: string
@@ -68,6 +71,10 @@ export function NewTaskPage() {
   const [preview, setPreview] = useState<Rating | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [catalog, setCatalog] = useState<CatalogItem[] | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogRevision, setCatalogRevision] = useState(0)
+  const [rankChange, setRankChange] = useState<{ from: number; to: number } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -93,6 +100,18 @@ export function NewTaskPage() {
       window.clearTimeout(timer)
     }
   }, [cardDraft, step])
+
+  useEffect(() => {
+    if (step !== 2) return
+    let active = true
+    setCatalog(null)
+    setCatalogLoading(true)
+    getCatalog()
+      .then((items) => { if (active) setCatalog(items) })
+      .catch(() => {}) // Ошибку показывает API-клиент; не выдаём пустой каталог за место #1.
+      .finally(() => { if (active) setCatalogLoading(false) })
+    return () => { active = false }
+  }, [step, catalogRevision])
 
   async function loadExamples() {
     setExamplesLoading(true)
@@ -158,6 +177,9 @@ export function NewTaskPage() {
     setSubmitting(true)
     try {
       const updated = await updateTaskCard(task.id, values)
+      setRankChange(task.position != null && updated.position != null && task.position !== updated.position
+        ? { from: task.position, to: updated.position }
+        : null)
       setTask(updated)
       setStep(3)
     } catch {
@@ -168,7 +190,7 @@ export function NewTaskPage() {
   }
 
   async function publish() {
-    if (!task) return
+    if (!task || task.status !== 'confirmed') return
     setSubmitting(true)
     try {
       setTask(await publishTask(task.id))
@@ -178,6 +200,19 @@ export function NewTaskPage() {
       setSubmitting(false)
     }
   }
+
+  function editCard() {
+    if (!task) return
+    cardForm.setFieldsValue(task.card)
+    setCardDraft(task.card)
+    setPreview(null)
+    setRankChange(null)
+    setStep(2)
+  }
+
+  const forecastPosition = preview && catalog && !previewLoading && !catalogLoading
+    ? predictCatalogPosition(preview.total, catalog, task ?? undefined)
+    : null
 
   if (role !== 'business') {
     return (
@@ -264,7 +299,7 @@ export function NewTaskPage() {
                 {task.questions.map((question) => (
                   <Card key={question.id} size="small" className="question-card">
                     <Space className="question-meta">
-                      <Typography.Text type="secondary">{FIELD_LABELS[question.field]}</Typography.Text>
+                      <Tag>{FIELD_LABELS[question.field]}</Tag>
                       <Badge count={`+${question.points} баллов`} color={token.colorPrimary} />
                     </Space>
                     <Typography.Paragraph strong>{question.text}</Typography.Paragraph>
@@ -289,8 +324,11 @@ export function NewTaskPage() {
           </div>
           <aside className="builder-aside">
             <Card>
-              <Typography.Title level={5}>Оценка черновика: {task.draft_rating?.total ?? 0}/100</Typography.Title>
-              {task.draft_rating && <LevelTag level={task.draft_rating.level} />}
+              <Tag>Прогноз</Tag>
+              <Typography.Title level={5}>
+                {task.draft_rating ? `Оценка черновика: ${task.draft_rating.total}/100` : 'Оценка черновика пока недоступна'}
+              </Typography.Title>
+              {task.draft_rating && <LevelTag level={task.draft_rating.level} label={task.draft_rating.level_label} />}
               <Typography.Paragraph className="builder-caption" type="secondary">
                 Это предварительная оценка. Итоговый рейтинг появится после подтверждения карточки.
               </Typography.Paragraph>
@@ -344,6 +382,21 @@ export function NewTaskPage() {
             </Form>
           </Card>
           <aside className="builder-aside">
+            <Card size="small" title="Прогноз места в каталоге" className="builder-position">
+              {forecastPosition != null ? (
+                <Typography.Paragraph strong>#{forecastPosition}</Typography.Paragraph>
+              ) : (
+                <Typography.Paragraph type="secondary">
+                  {catalogLoading || previewLoading ? 'Обновляем прогноз…' : 'Прогноз места недоступен'}
+                </Typography.Paragraph>
+              )}
+              {!catalogLoading && catalog === null && (
+                <Button size="small" onClick={() => setCatalogRevision((value) => value + 1)}>Обновить каталог</Button>
+              )}
+              <Typography.Text type="secondary">
+                По текущему полному каталогу. Фактическое место определит сервер после подтверждения и публикации.
+              </Typography.Text>
+            </Card>
             <Spin spinning={previewLoading}>
               {preview ? <RatingPanel rating={preview} preview /> : (
                 <Card title="Прогноз рейтинга">
@@ -374,8 +427,12 @@ export function NewTaskPage() {
                 description={<Link to={`/tasks/${task.id}`}>Открыть страницу задачи</Link>}
               />
             ) : (
-              <Button type="primary" onClick={publish} loading={submitting}>Опубликовать</Button>
+              <Button type="primary" onClick={publish} loading={submitting} disabled={task.status !== 'confirmed'}>
+                Опубликовать
+              </Button>
             )}
+            {rankChange && <RankChange from={rankChange.from} to={rankChange.to} />}
+            <Button className="builder-edit" onClick={editCard} disabled={submitting}>Редактировать карточку</Button>
           </Card>
           {task.rating && <aside className="builder-aside"><RatingPanel rating={task.rating} /></aside>}
         </div>

@@ -129,6 +129,27 @@
   margin-bottom: 24px;
 }
 
+.builder-position {
+  margin-bottom: 16px;
+}
+
+.builder-edit {
+  margin-top: 16px;
+}
+
+.rank-change {
+  margin-top: 16px;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  animation: rank-arrival 400ms ease-out;
+}
+
+@keyframes rank-arrival {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .question-list {
   display: grid;
   gap: 16px;
@@ -189,6 +210,19 @@
 
 .rating-scale-mark:last-child {
   transform: translateX(-100%);
+}
+
+.rating-scale-mark:nth-last-child(2) {
+  transform: translateX(-100%);
+}
+
+.rating-scale-mark:nth-last-child(2)::before,
+.rating-scale-mark:last-child::before {
+  left: 100%;
+}
+
+.rating-scale-mark:first-child::before {
+  left: 0;
 }
 
 .rating-categories,
@@ -342,6 +376,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .rank-change {
+    animation: none;
+  }
   .catalog-task {
     transition: none;
   }

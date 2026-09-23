@@ -14,10 +14,10 @@ export function RatingPanel({ rating, preview = false }: RatingPanelProps) {
   return (
     <Card className="rating-panel" title={preview ? 'Прогноз рейтинга' : 'Рейтинг задачи'}>
       <div className="rating-summary">
-        {preview && <Tag>прогноз</Tag>}
+        {preview && <Tag>Прогноз</Tag>}
         <ScoreRing score={rating.total} level={rating.level} type="circle" size={164} />
         <Typography.Text type="secondary">из 100 баллов</Typography.Text>
-        <LevelTag level={rating.level} showClarification />
+        <LevelTag level={rating.level} label={rating.level_label} showClarification />
         {preview && (
           <Typography.Text type="secondary" className="rating-preview-note">
             Засчитывается после подтверждения карточки
@@ -77,6 +77,9 @@ export function RatingPanel({ rating, preview = false }: RatingPanelProps) {
 
       <Divider />
       <Typography.Title level={5}>Что повысит рейтинг</Typography.Title>
+      <Typography.Paragraph strong>
+        Все пункты → {rating.total + rating.missing.reduce((sum, item) => sum + item.points, 0)} баллов
+      </Typography.Paragraph>
       {rating.missing.length > 0 ? (
         <ul className="rating-missing">
           {rating.missing.map((item, index) => (
