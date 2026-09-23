@@ -1,11 +1,11 @@
 import logging
-import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app import ai, rating
+from app.ai import stub
 from app.db import get_session
 from app.models import Proposal, Task, utc_now
 from app.routers.catalog import published_tasks, update_positions
@@ -48,21 +48,11 @@ def create_task(body: TaskCreate, session: Session = Depends(get_session)):
             raise ValueError("Ожидалось от 3 до 5 вопросов")
     except Exception as exc:
         logger.warning("Сбой анализа черновика (%s), используется заглушка", type(exc).__name__)
-        # ponytail: local fallback until the AI module exposes its own offline entry points.
-        context = body.draft_text[:2000]
+        # Last-resort fallback keeps only user text if the AI pipeline itself fails.
+        card = TaskCard(context=body.draft_text[:2000])
         analysis = ai.DraftAnalysis(
-            card=TaskCard(context=context), evidence={"context": context}, ai_mode="stub",
-            questions=[
-                Question(id="q1", field="need", points=15,
-                         text="Что именно должно измениться после работы команды?",
-                         why="Уточните потребность бизнеса и желаемое изменение."),
-                Question(id="q2", field="data", points=20,
-                         text="Какие данные, примеры или материалы вы готовы дать команде (выгрузки, таблицы, доступы)?",
-                         why="Данные и материалы помогут команде начать работу."),
-                Question(id="q3", field="expected_result", points=15,
-                         text="Какой конкретный результат вы ждёте: прототип, отчёт, модель, сервис?",
-                         why="Конкретный результат задаёт цель работы команды."),
-            ],
+            card=card, evidence={"context": card.context}, ai_mode="stub",
+            questions=stub.make_questions(card),
         )
     task = Task(
         **body.model_dump(),
@@ -106,7 +96,7 @@ def submit_answers(id: int, body: AnswersSubmit, session: Session = Depends(get_
                 fields[field] = answer.answer
                 evidence[field] = answer.answer
         if not fields["title"]:
-            fields["title"] = re.split(r"(?<=[.!?])\s+", task.draft_text.strip(), maxsplit=1)[0][:80]
+            fields["title"] = stub.make_title(task.draft_text)
         result = ai.CardBuild(card=TaskCard(**fields), evidence=evidence, ai_mode="stub")
     task.answers = [answer.model_dump() for answer in body.answers]
     task.evidence = {
