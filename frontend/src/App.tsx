@@ -2,6 +2,7 @@ import { Layout, Menu, Segmented, Select, theme, Typography } from 'antd'
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useRole } from './context/RoleContext'
 import type { Role } from './context/RoleContext'
+import { NewTaskPage } from './pages/NewTaskPage'
 
 const navigation = [
   { key: '/', label: 'Каталог' },
@@ -63,7 +64,7 @@ export default function App() {
       <Layout.Content className="app-content">
         <Routes>
           <Route path="/" element={<Page title="Каталог" />} />
-          <Route path="/tasks/new" element={<Page title="Конструктор" />} />
+          <Route path="/tasks/new" element={<NewTaskPage />} />
           <Route path="/tasks/:id" element={<Page title="Задача" />} />
           <Route path="/my" element={<Page title="Мои задачи" />} />
           <Route path="*" element={<Navigate to="/" replace />} />

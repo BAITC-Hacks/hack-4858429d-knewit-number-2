@@ -72,3 +72,83 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+.task-builder .ant-form-item-extra {
+  padding-top: 18px;
+}
+
+.task-builder {
+  width: 100%;
+}
+
+.builder-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.builder-heading .ant-typography {
+  margin-bottom: 0;
+}
+
+.builder-steps {
+  margin: 24px 0 32px;
+}
+
+.builder-main-card {
+  max-width: 850px;
+}
+
+.builder-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 24px;
+  align-items: start;
+}
+
+.builder-grid .builder-main-card {
+  max-width: none;
+}
+
+.builder-aside {
+  position: sticky;
+  top: 24px;
+}
+
+.builder-caption {
+  margin-top: 16px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.builder-alert {
+  margin-bottom: 24px;
+}
+
+.question-list {
+  display: grid;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.question-meta {
+  margin-bottom: 12px;
+}
+
+.question-card .ant-typography {
+  margin-bottom: 16px;
+}
+
+.builder-score {
+  display: flex;
+  min-height: 160px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.builder-final-score {
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
