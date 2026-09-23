@@ -1,0 +1,46 @@
+#root {
+  min-height: 100vh;
+}
+
+.app-layout {
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.app-logo {
+  flex: none;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.app-logo:hover {
+  color: #fff;
+}
+
+.app-nav {
+  flex: 1;
+  min-width: 0;
+}
+
+.role-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-select {
+  width: 190px;
+}
+
+.app-content {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
