@@ -118,6 +118,16 @@ def test_stub_task_flow(client):
     assert all(team["points"] == 0 for team in client.get("/api/teams").json())
     assert client.get("/api/tasks/9999/proposals").status_code == 404
     assert client.post("/api/proposals/9999/decision", json={"decision": "selected"}).status_code == 404
+    first_milestone = f"/api/proposals/{proposals[0]['id']}/milestone"
+    for count in (1, 2):
+        response = client.post(first_milestone)
+        assert response.status_code == 200, response.text
+        assert response.json()["milestones_confirmed"] == count
+        scores = {team["id"]: team["points"] for team in client.get("/api/teams").json()}
+        assert scores == {team_ids[0]: count * 10, team_ids[1]: 0}
+    assert client.post(f"/api/proposals/{proposals[1]['id']}/milestone").status_code == 400
+    assert client.post("/api/proposals/9999/milestone").status_code == 404
+    assert client.get(f"{url}/proposals").json()[1]["milestones_confirmed"] == 0
 
 
 def test_task_flow_validation(client):
@@ -152,7 +162,7 @@ def test_task_flow_validation(client):
 
 
 @pytest.mark.parametrize("failure", ["timeout", "invalid_response"])
-def test_ai_failures_fall_back_without_losing_user_input(client, monkeypatch, failure):
+def test_ai_failures_fall_back_without_losing_user_input(client, monkeypatch, caplog, failure):
     def unavailable(*args, **kwargs):
         if failure == "timeout":
             raise TimeoutError("AI provider unavailable")
@@ -165,6 +175,9 @@ def test_ai_failures_fall_back_without_losing_user_input(client, monkeypatch, fa
     draft = response.json()
     assert draft["status"] == "clarifying" and draft["ai_mode"] == "stub"
     assert 3 <= len(draft["questions"]) <= 5
+    for question in draft["questions"]:
+        assert question["points"] == sum(item["points"] for item in draft["draft_rating"]["missing"]
+                                         if item["field"] == question["field"])
     assert draft["card"]["context"] == draft["evidence"]["context"] == "а" * 2000
     assert draft["rating"] is None and draft["draft_rating"] is not None
     data_question = next(question for question in draft["questions"] if question["field"] == "data")
@@ -184,6 +197,7 @@ def test_ai_failures_fall_back_without_losing_user_input(client, monkeypatch, fa
     assert task["card"]["data"] == task["evidence"]["data"] == answers[0]["answer"]
     assert 3 <= len(task["card"]["title"]) <= 80
     assert client.get(url).json() == task
+    assert "Сбой анализа черновика" in caplog.text and "Сбой сборки карточки" in caplog.text
 
 
 def test_task_reads_derive_global_positions_and_proposal_counts(client):
@@ -217,3 +231,94 @@ def test_task_reads_derive_global_positions_and_proposal_counts(client):
         assert client.get(f"/api/tasks/{id}").json() == tasks[id]
     with Session(db.engine) as session:
         assert all(row.position == 99 and row.proposals_count == 7 for row in session.exec(select(TaskRow)))
+
+
+def test_endpoint_errors_are_russian_and_logged(client, caplog):
+    task = client.post("/api/tasks", json=DRAFT).json()
+    url = f"/api/tasks/{task['id']}"
+    answer = {"answers": [{"question_id": task["questions"][0]["id"], "answer": "Нужен анализ продаж"}]}
+    proposal = {
+        "team_id": 9999, "idea": "Исследуем продажи кофеен", "plan": "Построим отчёт по дням",
+        "deadline": "6 недель", "prototype_url": "https://example.com/prototype",
+    }
+    cases = [
+        ("get", "/api/not-found", {}, 404),
+        ("delete", "/api/tasks", {}, 405),
+        ("post", "/api/tasks", {"json": {}}, 422),
+        ("post", "/api/tasks", {"json": {**DRAFT, "draft_text": "мало"}}, 422),
+        ("get", "/api/tasks/9999", {}, 404),
+        ("get", "/api/tasks/not-a-number", {}, 422),
+        ("post", "/api/tasks/9999/answers", {"json": answer}, 404),
+        ("post", f"{url}/answers", {"json": {"answers": []}}, 422),
+        ("post", f"{url}/answers", {"json": {"answers": "wrong-type"}}, 422),
+        ("post", f"{url}/answers", {"json": {"answers": [{"question_id": "unknown", "answer": "Ответ"}]}}, 400),
+        ("put", "/api/tasks/9999/card", {"json": {"title": "Карточка"}}, 404),
+        ("put", f"{url}/card", {"json": {"title": "Карточка"}}, 400),
+        ("put", f"{url}/card", {"json": {"title": 42}}, 422),
+        ("post", f"{url}/publish", {}, 400),
+        ("post", "/api/tasks/9999/publish", {}, 404),
+        ("post", "/api/rating/preview", {"json": {"context": "а" * 2001}}, 422),
+        ("get", "/api/catalog?level=unknown", {}, 422),
+        ("get", "/api/teams/9999/recommendations", {}, 404),
+        ("get", "/api/teams/not-a-number/recommendations", {}, 422),
+        ("post", "/api/tasks/9999/proposals", {"json": proposal}, 404),
+        ("get", "/api/tasks/9999/proposals", {}, 404),
+        ("post", f"{url}/proposals", {"json": proposal}, 400),
+        ("post", f"{url}/proposals", {"json": {**proposal, "team_id": []}}, 422),
+        ("post", f"{url}/proposals", {"json": {**proposal, "prototype_url": "ftp://example.com"}}, 422),
+        ("post", "/api/proposals/9999/decision", {"json": {"decision": "selected"}}, 404),
+        ("post", "/api/proposals/9999/decision", {"json": {"decision": "pending"}}, 422),
+        ("post", "/api/proposals/9999/milestone", {}, 404),
+        ("post", "/api/proposals/not-a-number/milestone", {}, 422),
+        ("post", "/api/tasks", {"content": "{", "headers": {"Content-Type": "application/json"}}, 422),
+        ("post", "/api/tasks", {"content": b"\xff", "headers": {"Content-Type": "application/json"}}, 400),
+    ]
+    for method, path, kwargs, status in cases:
+        caplog.clear()
+        response = client.request(method, path, **kwargs)
+        assert response.status_code == status, response.text
+        detail = response.json()["detail"]
+        assert isinstance(detail, str) and any("А" <= letter <= "я" for letter in detail), detail
+        assert any(record.name == "app.main" and f"HTTP {status}" in record.getMessage() for record in caplog.records)
+        if status == 405:
+            assert "allow" in response.headers
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid_json"])
+def test_provider_failures_use_stub_through_api(client, monkeypatch, caplog, failure):
+    monkeypatch.setenv("AI_MODE", "auto")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-only")
+
+    def failed_provider(*args, **kwargs):
+        if failure == "timeout":
+            raise TimeoutError("Тестовый сбой провайдера")
+        return "invalid JSON"
+
+    monkeypatch.setattr(ai.client, "_chat", failed_provider)
+    response = client.post("/api/tasks", json=DRAFT)
+    assert response.status_code == 200, response.text
+    task = response.json()
+    assert task["ai_mode"] == "stub" and task["status"] == "clarifying"
+    data_question = next(question for question in task["questions"] if question["field"] == "data")
+    response = client.post(f"/api/tasks/{task['id']}/answers", json={"answers": [
+        {"question_id": data_question["id"], "answer": "Выгрузка чеков в CSV"},
+    ]})
+    assert response.status_code == 200, response.text
+    task = response.json()
+    assert task["ai_mode"] == "stub" and task["status"] == "card_ready"
+    assert task["card"]["data"] == task["evidence"]["data"] == "Выгрузка чеков в CSV"
+    assert "openai" in caplog.text and "nvidia" in caplog.text
+
+
+def test_unexpected_errors_are_logged_without_exposing_details(client, monkeypatch, caplog):
+    def fail_rating(card):
+        raise RuntimeError("internal-error-detail")
+
+    monkeypatch.setattr(rating, "compute_rating", fail_rating)
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = failing_client.post("/api/rating/preview", json={})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Внутренняя ошибка сервера. Повторите запрос позже."}
+    assert "HTTP 500" in caplog.text and "RuntimeError" in caplog.text
+    assert "internal-error-detail" not in response.text

@@ -50,6 +50,7 @@ TEMPLATES: dict[CardField, tuple[str, str]] = {
         "Команда будет знать, когда ждать обратную связь.",
     ),
 }
+OPTIONAL_WHY = "Поле уже заполнено, баллов не добавит — ответьте, только если хотите что-то уточнить."
 # При равных баллах сначала то, без чего команде не стартовать; уже заполненные поля — в конце.
 PRIORITY: list[CardField] = [
     "data", "expected_result", "success_criteria", "users", "constraints",
@@ -162,7 +163,7 @@ def make_questions(card: TaskCard, preferred: list | None = None) -> list[Questi
     ask_contact = points.get("contact", 0) > 0 and "contact" not in chosen
     if ask_contact and len(chosen) >= 5:
         chosen.pop(list(chosen)[-1])
-    target = (3 if chosen else 5) - ask_contact  # вопросы модели только добиваем до минимума
+    target = 5 - ask_contact  # вопросы модели добиваем шаблонами по самым весомым пробелам
     for field in ranked:
         if len(chosen) >= target:
             break
@@ -170,10 +171,10 @@ def make_questions(card: TaskCard, preferred: list | None = None) -> list[Questi
             chosen.setdefault(field, TEMPLATES[field])
     if ask_contact:
         chosen["contact"] = TEMPLATES["contact"]
-    for field in ranked:
+    for field in ranked:  # §8 требует минимум 3 вопроса, даже если спрашивать почти нечего
         if len(chosen) >= 3:
             break
-        chosen.setdefault(field, TEMPLATES[field])
+        chosen.setdefault(field, (TEMPLATES[field][0], OPTIONAL_WHY) if not points.get(field) else TEMPLATES[field])
     return [
         Question(id=f"q{number}", field=field, text=text, why=why, points=points.get(field, 0))
         for number, (field, (text, why)) in enumerate(chosen.items(), start=1)
